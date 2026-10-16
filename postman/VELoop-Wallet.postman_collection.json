@@ -1,0 +1,503 @@
+{
+  "info": {
+    "_postman_id": "veloop-wallet-system-collection-2026",
+    "name": "VELoop Rewards Wallet & Payout System",
+    "description": "Comprehensive Postman collection for VELoop Rewards Wallet & Payout API including Auth, Wallet, Rewards, Payout, Withdrawals, Admin and Health endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "withdrawalId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "demoUserId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"gamer@veloop.test\",\n  \"password\": \"SecurePass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login Demo User (Sets Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('token', res.data.token);",
+                  "    pm.collectionVariables.set('demoUserId', res.data.user.id);",
+                  "    console.log('User Token set successfully');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"demo@veloop.test\",\n  \"password\": \"DemoPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login Admin (Sets Admin Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('adminToken', res.data.token);",
+                  "    console.log('Admin Token set successfully');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@veloop.test\",\n  \"password\": \"AdminPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Current Profile (Me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Wallet",
+      "item": [
+        {
+          "name": "Get User Balances",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallet",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallet"]
+            }
+          }
+        },
+        {
+          "name": "Get Wallet Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallet/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallet", "summary"]
+            }
+          }
+        },
+        {
+          "name": "Get Transactions (Ledger)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallet/transactions?page=1&limit=20&currency=VEs",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallet", "transactions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "currency", "value": "VEs" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reconcile User Wallet",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallet/reconcile",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallet", "reconcile"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rewards",
+      "item": [
+        {
+          "name": "Claim Daily Reward (+100 VEs)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rewards/daily",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards", "daily"]
+            }
+          }
+        },
+        {
+          "name": "Claim Ad Reward (+100 VEs, max 10/day)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rewards/ad",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards", "ad"]
+            }
+          }
+        },
+        {
+          "name": "Get Rewards Claim Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rewards/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["rewards", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payout",
+      "item": [
+        {
+          "name": "Get Payout Methods",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payout/methods",
+              "host": ["{{baseUrl}}"],
+              "path": ["payout", "methods"]
+            }
+          }
+        },
+        {
+          "name": "Get Options for UPI",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payout/options/upi",
+              "host": ["{{baseUrl}}"],
+              "path": ["payout", "options", "upi"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Withdrawals",
+      "item": [
+        {
+          "name": "Create Withdrawal (Idempotent)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.withdrawalId) {",
+                  "    pm.collectionVariables.set('withdrawalId', res.data.withdrawalId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "postman-test-idem-key-001" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"optionId\": \"upi_10\",\n  \"payoutDetails\": {\n    \"upiId\": \"demo@okaxis\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/withdrawals",
+              "host": ["{{baseUrl}}"],
+              "path": ["withdrawals"]
+            }
+          }
+        },
+        {
+          "name": "Get User Withdrawals",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/withdrawals?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["withdrawals"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Single Withdrawal by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/withdrawals/{{withdrawalId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["withdrawals", "{{withdrawalId}}"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Pending Withdrawal",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/withdrawals/{{withdrawalId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["withdrawals", "{{withdrawalId}}", "cancel"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Admin Credit Wallet (Idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "admin-credit-idem-key-001" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{demoUserId}}\",\n  \"currency\": \"VEs\",\n  \"amount\": 5000,\n  \"reason\": \"Tournament prize credit\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/wallet/credit",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallet", "credit"]
+            }
+          }
+        },
+        {
+          "name": "Admin Debit Wallet (Idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "admin-debit-idem-key-001" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{demoUserId}}\",\n  \"currency\": \"VEs\",\n  \"amount\": 1000,\n  \"reason\": \"Manual penalty correction\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/wallet/debit",
+              "host": ["{{baseUrl}}"],
+              "path": ["wallet", "debit"]
+            }
+          }
+        },
+        {
+          "name": "Admin List All Withdrawals",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/withdrawals?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "withdrawals"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin Review Withdrawal (Approve/Reject)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"APPROVED\",\n  \"reviewNotes\": \"Bank payout transfer confirmed via banking webhook\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/withdrawals/{{withdrawalId}}/review",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "withdrawals", "{{withdrawalId}}", "review"]
+            }
+          }
+        },
+        {
+          "name": "Admin Reconcile Specific User",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/reconcile/{{demoUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "reconcile", "{{demoUserId}}"]
+            }
+          }
+        },
+        {
+          "name": "Admin Update Payout Option Config",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"₹10 UPI Transfer (Express)\",\n  \"active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/payout-options/upi_10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "payout-options", "upi_10"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "System Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

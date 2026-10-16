@@ -1,0 +1,21 @@
+{
+  "name": "veloop-wallet",
+  "version": "1.0.0",
+  "description": "VELoop Rewards Wallet & Payout System",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev": "node -e \"const { spawn } = require('child_process'); spawn('npm', ['--prefix', 'backend', 'run', 'dev'], { stdio: 'inherit', shell: true }); spawn('npm', ['--prefix', 'frontend', 'run', 'dev'], { stdio: 'inherit', shell: true });\"",
+    "seed": "npm --prefix backend run seed",
+    "test": "npm --prefix backend test",
+    "build": "npm --prefix frontend run build"
+  },
+  "keywords": [
+    "rewards",
+    "wallet",
+    "payout",
+    "mongodb"
+  ],
+  "author": "VELoop Team",
+  "license": "ISC"
+}
