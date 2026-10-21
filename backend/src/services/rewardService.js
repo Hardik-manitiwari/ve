@@ -5,21 +5,14 @@ import { AppError } from '../utils/AppError.js';
 import { withTransaction } from '../utils/transaction.js';
 import { creditWallet } from './walletService.js';
 
-/**
- * Get current UTC date key YYYY-MM-DD
- */
 export const getUtcDayKey = () => {
   return new Date().toISOString().slice(0, 10);
 };
 
-/**
- * Claim daily reward: 100 VEs once per UTC day
- */
 export const claimDailyReward = async (userId) => {
   const dayKey = getUtcDayKey();
   const rewardConfig = REWARDS.DAILY_REWARD;
 
-  // Pre-check for fast rejection
   const existing = await DailyClaim.findOne({ userId, dayKey });
   if (existing) {
     throw new AppError('Daily reward has already been claimed today.', 400, 'DAILY_REWARD_ALREADY_CLAIMED');
@@ -27,7 +20,7 @@ export const claimDailyReward = async (userId) => {
 
   try {
     return await withTransaction(async (session) => {
-      // In-transaction insertion guarded by unique index
+      // Unique index on (userId, dayKey) in DailyClaim prevents duplicate claims for the UTC day.
       const [claim] = await DailyClaim.create(
         [
           {
@@ -41,7 +34,6 @@ export const claimDailyReward = async (userId) => {
         { session }
       );
 
-      // Credit wallet
       const { wallet, transaction } = await creditWallet({
         userId,
         currency: rewardConfig.currency,
@@ -71,16 +63,12 @@ export const claimDailyReward = async (userId) => {
   }
 };
 
-/**
- * Claim ad reward: +100 VEs, maximum 10 times per UTC day
- */
 export const claimAdReward = async (userId) => {
   const dayKey = getUtcDayKey();
   const rewardConfig = REWARDS.AD_REWARD;
   const maxPerDay = rewardConfig.maxPerDay;
 
   return withTransaction(async (session) => {
-    // Check current count
     const adRecord = await AdClaim.findOne({ userId, dayKey }).session(session);
     if (adRecord && adRecord.count >= maxPerDay) {
       throw new AppError(
@@ -90,7 +78,7 @@ export const claimAdReward = async (userId) => {
       );
     }
 
-    // Atomic increment or insert
+    // Atomic update with count check keeps concurrent clicks from exceeding the limit.
     const updated = await AdClaim.findOneAndUpdate(
       {
         userId,
@@ -116,7 +104,6 @@ export const claimAdReward = async (userId) => {
       );
     }
 
-    // Credit wallet
     const { wallet, transaction } = await creditWallet({
       userId,
       currency: rewardConfig.currency,
@@ -142,9 +129,6 @@ export const claimAdReward = async (userId) => {
   });
 };
 
-/**
- * Get user reward status for today (daily claimed status, ad count)
- */
 export const getRewardStatus = async (userId) => {
   const dayKey = getUtcDayKey();
   const [dailyClaim, adClaim] = await Promise.all([

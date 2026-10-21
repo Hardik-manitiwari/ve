@@ -11,10 +11,6 @@ const signToken = (id) => {
   });
 };
 
-/**
- * Register a new user
- * POST /api/auth/register
- */
 export const register = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
@@ -32,9 +28,7 @@ export const register = asyncHandler(async (req, res, next) => {
     password,
   });
 
-  // Ensure user has initial wallet
   await ensureWallet(user._id);
-
   const token = signToken(user._id);
 
   res.status(201).json({
@@ -52,10 +46,6 @@ export const register = asyncHandler(async (req, res, next) => {
   });
 });
 
-/**
- * User login
- * POST /api/auth/login
- */
 export const login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
@@ -94,10 +84,6 @@ export const login = asyncHandler(async (req, res, next) => {
   });
 });
 
-/**
- * Get current user profile and wallet balances
- * GET /api/auth/me
- */
 export const getMe = asyncHandler(async (req, res) => {
   const wallet = await getWallet(req.user._id);
 

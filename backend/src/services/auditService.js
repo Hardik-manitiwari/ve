@@ -1,8 +1,5 @@
 import { AuditLog } from '../models/AuditLog.js';
 
-/**
- * Record an audit log entry within an optional MongoDB session.
- */
 export const recordAuditLog = async ({
   actorId,
   action,

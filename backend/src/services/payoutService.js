@@ -4,11 +4,8 @@ import { AUDIT_ACTIONS } from '../config/constants.js';
 import { AppError } from '../utils/AppError.js';
 import { recordAuditLog } from './auditService.js';
 
-/**
- * Get all available payout methods with active flags and metadata.
- */
 export const getPayoutMethods = async () => {
-  // Check active options per method in DB
+  // Count active options in the DB so methods with 0 options show as unavailable.
   const activeCounts = await PayoutOption.aggregate([
     { $match: { active: true } },
     { $group: { _id: '$method', count: { $sum: 1 } } },
@@ -32,9 +29,6 @@ export const getPayoutMethods = async () => {
   });
 };
 
-/**
- * Get active payout options for a specific method.
- */
 export const getOptionsByMethod = async (methodId) => {
   const methodConfig = PAYOUT_METHODS[methodId];
   if (!methodConfig) {
@@ -67,9 +61,6 @@ export const getOptionsByMethod = async (methodId) => {
   };
 };
 
-/**
- * Validate and sanitize payout details (e.g. upiId, email). Strips unknown keys.
- */
 export const validatePayoutDetails = (methodId, details = {}) => {
   const methodConfig = PAYOUT_METHODS[methodId];
   if (!methodConfig) {
@@ -78,6 +69,7 @@ export const validatePayoutDetails = (methodId, details = {}) => {
 
   const sanitized = {};
 
+  // Strip unknown keys and validate required fields.
   for (const field of methodConfig.requiredFields) {
     const value = details[field];
     if (!value || typeof value !== 'string' || !value.trim()) {
@@ -97,9 +89,6 @@ export const validatePayoutDetails = (methodId, details = {}) => {
   return sanitized;
 };
 
-/**
- * Find and validate a payout option by optionId.
- */
 export const resolvePayoutOption = async (optionId, session = null) => {
   const query = PayoutOption.findOne({ optionId, active: true });
   if (session) query.session(session);
@@ -112,9 +101,6 @@ export const resolvePayoutOption = async (optionId, session = null) => {
   return option;
 };
 
-/**
- * Admin: Update payout option config (active, requiredAmount, etc.) with audit log.
- */
 export const updatePayoutOption = async (optionId, updateData, adminId, ip = '') => {
   const allowedUpdates = ['name', 'requiredAmount', 'payoutValue', 'active', 'sortOrder'];
   const sanitizedUpdate = {};

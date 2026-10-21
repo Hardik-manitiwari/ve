@@ -7,14 +7,11 @@ import { AppError } from '../utils/AppError.js';
 import { withTransaction } from '../utils/transaction.js';
 import { recordAuditLog } from './auditService.js';
 
-/**
- * Ensure a wallet document exists for a user.
- */
 export const ensureWallet = async (userId, session = null) => {
   const options = { upsert: true, new: true, setDefaultsOnInsert: true };
   if (session) options.session = session;
 
-  const wallet = await Wallet.findOneAndUpdate(
+  return Wallet.findOneAndUpdate(
     { userId },
     {
       $setOnInsert: {
@@ -28,13 +25,8 @@ export const ensureWallet = async (userId, session = null) => {
     },
     options
   );
-
-  return wallet;
 };
 
-/**
- * Apply a balance movement (CREDIT or DEBIT) atomically inside a transaction.
- */
 export const applyMovement = async ({
   userId,
   currency = 'VEs',
@@ -56,14 +48,13 @@ export const applyMovement = async ({
     throw new AppError('Amount must be a positive integer', 400, 'INVALID_AMOUNT');
   }
 
-  // Operation executor that runs within a session
   const executeInSession = async (activeSession) => {
     let balanceBefore;
     let balanceAfter;
     let updatedWallet;
 
     if (type === TRANSACTION_TYPES.DEBIT) {
-      // Conditional atomic update
+      // The $gte check guards against negative balance under concurrent debits.
       updatedWallet = await Wallet.findOneAndUpdate(
         {
           userId,
@@ -88,7 +79,7 @@ export const applyMovement = async ({
       balanceAfter = updatedWallet[currency];
       balanceBefore = balanceAfter + numericAmount;
     } else if (type === TRANSACTION_TYPES.CREDIT) {
-      // Build $setOnInsert for other currencies to avoid path conflicts
+      // Set defaults for other currencies on first insert so wallet stays consistent.
       const setOnInsert = {};
       CURRENCIES.forEach((c) => {
         if (c !== currency) {
@@ -115,7 +106,7 @@ export const applyMovement = async ({
       throw new AppError(`Invalid transaction type: ${type}`, 400, 'INVALID_TYPE');
     }
 
-    // Ledger write: Exactly one append-only row per movement
+    // Ledger row is written in the same transaction to keep history append-only.
     const transactionId = uuidv4();
     const ledgerRows = await WalletTransaction.create(
       [
@@ -152,9 +143,6 @@ export const applyMovement = async ({
   return withTransaction(executeInSession);
 };
 
-/**
- * Credit user wallet.
- */
 export const creditWallet = async ({
   userId,
   currency = 'VEs',
@@ -184,9 +172,6 @@ export const creditWallet = async ({
   });
 };
 
-/**
- * Debit user wallet.
- */
 export const debitWallet = async ({
   userId,
   currency = 'VEs',
@@ -216,9 +201,6 @@ export const debitWallet = async ({
   });
 };
 
-/**
- * Admin wallet adjustment (credit or debit) with audit log.
- */
 export const adjustWallet = async ({
   adminId,
   userId,
@@ -276,9 +258,6 @@ export const adjustWallet = async ({
   return withTransaction(execute);
 };
 
-/**
- * Get wallet document for a user (or default zeros).
- */
 export const getWallet = async (userId) => {
   let wallet = await Wallet.findOne({ userId });
   if (!wallet) {
@@ -295,9 +274,6 @@ export const getWallet = async (userId) => {
   };
 };
 
-/**
- * Get paginated transactions for a user.
- */
 export const getTransactions = async (userId, { page = 1, limit = 20, currency } = {}) => {
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
@@ -328,9 +304,6 @@ export const getTransactions = async (userId, { page = 1, limit = 20, currency }
   };
 };
 
-/**
- * Get wallet summary: balances, totals credited/debited, pending withdrawals count.
- */
 export const getSummary = async (userId) => {
   const [wallet, pendingCount, totals] = await Promise.all([
     getWallet(userId),

@@ -1,8 +1,4 @@
-/**
- * Mask sensitive values like UPI ID or email.
- * e.g., 'naveen@okaxis' -> 'na****@okaxis'
- * e.g., 'john.doe@example.com' -> 'jo****@example.com'
- */
+// Masks handles like naveen@okaxis into na****@okaxis.
 export const maskSensitiveValue = (value) => {
   if (!value || typeof value !== 'string') return value;
 
@@ -15,14 +11,10 @@ export const maskSensitiveValue = (value) => {
     return `${visiblePrefix}****@${domain}`;
   }
 
-  // Fallback for non-email/UPI strings
   if (value.length <= 4) return '****';
   return `${value.substring(0, 2)}****${value.substring(value.length - 2)}`;
 };
 
-/**
- * Mask sensitive fields in payoutDetails
- */
 export const maskPayoutDetails = (payoutDetails) => {
   if (!payoutDetails || typeof payoutDetails !== 'object') return {};
 
@@ -36,9 +28,6 @@ export const maskPayoutDetails = (payoutDetails) => {
   return masked;
 };
 
-/**
- * Serialize a withdrawal object for API responses
- */
 export const serializeWithdrawal = (withdrawal) => {
   if (!withdrawal) return null;
   const doc = withdrawal.toObject ? withdrawal.toObject() : { ...withdrawal };

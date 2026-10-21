@@ -13,9 +13,6 @@ import { resolvePayoutOption, validatePayoutDetails } from './payoutService.js';
 import { recordAuditLog } from './auditService.js';
 import { serializeWithdrawal } from '../utils/serializers.js';
 
-/**
- * Create a withdrawal request atomically inside a transaction (Option A).
- */
 export const createWithdrawal = async ({
   userId,
   optionId,
@@ -23,7 +20,6 @@ export const createWithdrawal = async ({
   idempotencyKey,
   ip = '',
 }) => {
-  // 1. Validate Idempotency Key format
   if (!idempotencyKey || typeof idempotencyKey !== 'string') {
     throw new AppError('Idempotency-Key header is required', 400, 'MISSING_IDEMPOTENCY_KEY');
   }
@@ -34,7 +30,7 @@ export const createWithdrawal = async ({
     throw new AppError('Idempotency-Key must be 8-100 alphanumeric characters, underscores or dashes', 400, 'INVALID_IDEMPOTENCY_KEY');
   }
 
-  // 2. Early Idempotency Check (read outside transaction for quick return)
+  // Check early to return quickly on duplicate clicks without opening a transaction.
   const existingWithdrawal = await Withdrawal.findOne({ userId, idempotencyKey: trimmedKey });
   if (existingWithdrawal) {
     return {
@@ -46,7 +42,7 @@ export const createWithdrawal = async ({
 
   try {
     return await withTransaction(async (session) => {
-      // 3. Double-check idempotency inside the transaction
+      // Re-check inside the transaction to avoid race condition on concurrent submits.
       const inTxExisting = await Withdrawal.findOne({ userId, idempotencyKey: trimmedKey }).session(session);
       if (inTxExisting) {
         return {
@@ -56,7 +52,6 @@ export const createWithdrawal = async ({
         };
       }
 
-      // 4. Check max pending withdrawals
       const pendingCount = await Withdrawal.countDocuments({
         userId,
         status: WITHDRAWAL_STATUSES.PENDING,
@@ -70,15 +65,12 @@ export const createWithdrawal = async ({
         );
       }
 
-      // 5. Resolve payout option (client amount is strictly ignored)
+      // Amounts are decided by the optionId lookup on the server, ignoring whatever the client sends.
       const option = await resolvePayoutOption(optionId, session);
-
-      // 6. Validate and sanitize payout details
       const sanitizedDetails = validatePayoutDetails(option.method, payoutDetails);
-
       const withdrawalId = uuidv4();
 
-      // 7. Deduct balance immediately with atomic balance guard
+      // Deduct points immediately so the user cannot double-spend while review is pending.
       await debitWallet({
         userId,
         currency: option.currency,
@@ -95,7 +87,6 @@ export const createWithdrawal = async ({
         session,
       });
 
-      // 8. Create Withdrawal record
       const [withdrawal] = await Withdrawal.create(
         [
           {
@@ -115,7 +106,6 @@ export const createWithdrawal = async ({
         { session }
       );
 
-      // 9. Write Audit Log
       await recordAuditLog({
         actorId: userId,
         action: AUDIT_ACTIONS.WITHDRAWAL_CREATED,
@@ -139,7 +129,7 @@ export const createWithdrawal = async ({
       };
     });
   } catch (error) {
-    // Fallback: If duplicate-key error 11000 occurred on concurrent insertion
+    // If two requests hit MongoDB at the exact same time, the compound unique index catches it.
     if (error.code === 11000 && error.keyPattern?.idempotencyKey) {
       const fallbackDoc = await Withdrawal.findOne({ userId, idempotencyKey: trimmedKey });
       if (fallbackDoc) {
@@ -154,12 +144,8 @@ export const createWithdrawal = async ({
   }
 };
 
-/**
- * User cancels their own pending withdrawal.
- */
 export const cancelWithdrawal = async ({ withdrawalId, userId, ip = '' }) => {
   return withTransaction(async (session) => {
-    // Find withdrawal matching id and userId
     const withdrawal = await Withdrawal.findOne({
       $or: [{ withdrawalId }, { _id: withdrawalId.match(/^[0-9a-fA-F]{24}$/) ? withdrawalId : null }],
       userId,
@@ -173,7 +159,7 @@ export const cancelWithdrawal = async ({ withdrawalId, userId, ip = '' }) => {
       throw new AppError('Invalid status transition.', 409, 'INVALID_TRANSITION');
     }
 
-    // Conditional atomic update
+    // Matching current status in the filter prevents double cancellation.
     const updated = await Withdrawal.findOneAndUpdate(
       { _id: withdrawal._id, status: WITHDRAWAL_STATUSES.PENDING },
       { $set: { status: WITHDRAWAL_STATUSES.CANCELLED, reviewNotes: 'Cancelled by user' } },
@@ -184,7 +170,7 @@ export const cancelWithdrawal = async ({ withdrawalId, userId, ip = '' }) => {
       throw new AppError('Invalid status transition.', 409, 'INVALID_TRANSITION');
     }
 
-    // Refund immediately via REVERSAL ledger entry
+    // Refund points through a REVERSAL row so past ledger history remains untouched.
     await creditWallet({
       userId,
       currency: withdrawal.currency,
@@ -200,7 +186,6 @@ export const cancelWithdrawal = async ({ withdrawalId, userId, ip = '' }) => {
       session,
     });
 
-    // Audit log
     await recordAuditLog({
       actorId: userId,
       action: AUDIT_ACTIONS.WITHDRAWAL_CANCELLED,
@@ -219,9 +204,6 @@ export const cancelWithdrawal = async ({ withdrawalId, userId, ip = '' }) => {
   });
 };
 
-/**
- * Admin review withdrawal: transition to PROCESSING, APPROVED, or REJECTED.
- */
 export const reviewWithdrawal = async ({
   withdrawalId,
   adminId,
@@ -242,13 +224,12 @@ export const reviewWithdrawal = async ({
       throw new AppError('Withdrawal not found', 404, 'NOT_FOUND');
     }
 
-    // Validate state transition
     const allowedNextStatuses = ALLOWED_TRANSITIONS[withdrawal.status] || [];
     if (!allowedNextStatuses.includes(newStatus)) {
       throw new AppError('Invalid status transition.', 409, 'INVALID_TRANSITION');
     }
 
-    // Conditional atomic update on current status to prevent race conditions
+    // Match on current status so two admins reviewing at the same time cannot both write.
     const updated = await Withdrawal.findOneAndUpdate(
       { _id: withdrawal._id, status: withdrawal.status },
       {
@@ -266,7 +247,7 @@ export const reviewWithdrawal = async ({
       throw new AppError('Invalid status transition.', 409, 'INVALID_TRANSITION');
     }
 
-    // If REJECTED, refund via REVERSAL
+    // Rejecting restores user points via REVERSAL ledger record.
     if (newStatus === WITHDRAWAL_STATUSES.REJECTED) {
       await creditWallet({
         userId: withdrawal.userId,
@@ -285,7 +266,6 @@ export const reviewWithdrawal = async ({
       });
     }
 
-    // Map audit action
     let auditAction = AUDIT_ACTIONS.WITHDRAWAL_PROCESSING;
     if (newStatus === WITHDRAWAL_STATUSES.APPROVED) auditAction = AUDIT_ACTIONS.WITHDRAWAL_APPROVED;
     if (newStatus === WITHDRAWAL_STATUSES.REJECTED) auditAction = AUDIT_ACTIONS.WITHDRAWAL_REJECTED;
@@ -309,9 +289,6 @@ export const reviewWithdrawal = async ({
   });
 };
 
-/**
- * Get user's own withdrawals list.
- */
 export const getUserWithdrawals = async (userId, { page = 1, limit = 20, status } = {}) => {
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
@@ -342,11 +319,8 @@ export const getUserWithdrawals = async (userId, { page = 1, limit = 20, status 
   };
 };
 
-/**
- * Get single withdrawal by ID for a user.
- * Strictly checks user ownership - returns 404 if not found or belongs to another user.
- */
 export const getUserWithdrawalById = async (withdrawalId, userId) => {
+  // Query includes userId so callers cannot inspect another user's withdrawal.
   const query = {
     $or: [
       { withdrawalId },
@@ -363,9 +337,6 @@ export const getUserWithdrawalById = async (withdrawalId, userId) => {
   return serializeWithdrawal(withdrawal);
 };
 
-/**
- * Admin: List all withdrawals across all users with filters.
- */
 export const getAllWithdrawals = async ({ page = 1, limit = 20, status, userId } = {}) => {
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));

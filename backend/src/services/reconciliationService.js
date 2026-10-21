@@ -3,18 +3,13 @@ import { Wallet } from '../models/Wallet.js';
 import { CURRENCIES, TRANSACTION_TYPES } from '../config/constants.js';
 import { ensureWallet } from './walletService.js';
 
-/**
- * Reconcile a user's wallet against the immutable append-only ledger.
- * Computes sum(CREDIT) - sum(DEBIT) per currency and compares to wallet.
- */
 export const reconcileUserWallet = async (userId) => {
-  // 1. Get current wallet state
   let wallet = await Wallet.findOne({ userId });
   if (!wallet) {
     wallet = await ensureWallet(userId);
   }
 
-  // 2. Aggregate transactions from ledger grouped by currency and type
+  // Sum credits and debits directly from ledger rows.
   const ledgerAggregation = await WalletTransaction.aggregate([
     { $match: { userId: wallet.userId } },
     {
@@ -26,7 +21,6 @@ export const reconcileUserWallet = async (userId) => {
     },
   ]);
 
-  // Map sums
   const currencyData = {};
   CURRENCIES.forEach((currency) => {
     currencyData[currency] = {

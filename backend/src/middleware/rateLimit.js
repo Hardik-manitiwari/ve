@@ -3,9 +3,6 @@ import config from '../config/env.js';
 
 const isTest = config.NODE_ENV === 'test';
 
-/**
- * Standard error response for rate limiting
- */
 const rateLimitHandler = (message, code = 'RATE_LIMIT_EXCEEDED') => (req, res) => {
   res.status(429).json({
     success: false,
@@ -14,9 +11,7 @@ const rateLimitHandler = (message, code = 'RATE_LIMIT_EXCEEDED') => (req, res) =
   });
 };
 
-/**
- * Auth rate limit: 20 per 15 minutes per IP
- */
+// 20 attempts per 15 minutes per IP
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: isTest ? 1000 : 20,
@@ -25,9 +20,7 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-/**
- * Withdrawal creation: 10 per hour per user
- */
+// 10 withdrawals per hour per user
 export const withdrawalCreationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: isTest ? 1000 : 10,
@@ -37,9 +30,7 @@ export const withdrawalCreationLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-/**
- * Wallet mutations: 30 per minute
- */
+// 30 balance changes per minute per user
 export const walletMutationLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: isTest ? 1000 : 30,
@@ -49,9 +40,6 @@ export const walletMutationLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-/**
- * General API limiter: 120 per minute
- */
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: isTest ? 5000 : 120,

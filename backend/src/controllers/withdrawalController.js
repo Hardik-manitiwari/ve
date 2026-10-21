@@ -7,10 +7,6 @@ import {
 } from '../services/withdrawalService.js';
 import { AppError } from '../utils/AppError.js';
 
-/**
- * Submit a withdrawal request
- * POST /api/withdrawals
- */
 export const create = asyncHandler(async (req, res, next) => {
   const idempotencyKey = req.headers['idempotency-key'];
   if (!idempotencyKey) {
@@ -47,10 +43,6 @@ export const create = asyncHandler(async (req, res, next) => {
   });
 });
 
-/**
- * List user's withdrawals
- * GET /api/withdrawals
- */
 export const getMyWithdrawals = asyncHandler(async (req, res) => {
   const { page, limit, status } = req.query;
   const result = await getUserWithdrawals(req.user._id, { page, limit, status });
@@ -62,10 +54,6 @@ export const getMyWithdrawals = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * Get single withdrawal by ID (enforces ownership, 404 for other users)
- * GET /api/withdrawals/:id
- */
 export const getMyWithdrawalById = asyncHandler(async (req, res) => {
   const withdrawal = await getUserWithdrawalById(req.params.id, req.user._id);
 
@@ -75,10 +63,6 @@ export const getMyWithdrawalById = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * Cancel a pending withdrawal
- * POST /api/withdrawals/:id/cancel
- */
 export const cancel = asyncHandler(async (req, res) => {
   const updated = await cancelWithdrawal({
     withdrawalId: req.params.id,

@@ -1,13 +1,6 @@
 import mongoose from 'mongoose';
 
-/**
- * Execute work inside a MongoDB transaction.
- * If an active session is provided in options, reuses it without starting a nested transaction.
- *
- * @param {Function} workFn - async (session) => result
- * @param {Object} options - { existingSession }
- * @returns {Promise<any>}
- */
+// Runs a callback inside a MongoDB transaction, or reuses an existing session if passed.
 export const withTransaction = async (workFn, options = {}) => {
   if (options.existingSession) {
     return workFn(options.existingSession);

@@ -7,9 +7,6 @@ import { IdempotencyKey } from '../models/IdempotencyKey.js';
 import { AppError } from '../utils/AppError.js';
 import { TRANSACTION_TYPES } from '../config/constants.js';
 
-/**
- * Handle idempotent admin action
- */
 const handleIdempotentAdminAction = async (key, action, executeFn) => {
   if (key) {
     const existing = await IdempotencyKey.findOne({ key });
@@ -33,7 +30,7 @@ const handleIdempotentAdminAction = async (key, action, executeFn) => {
         responseBody: result,
       });
     } catch (e) {
-      // Ignore if key was created concurrently
+      // Ignore duplicate key collision if retry happened in parallel.
     }
   }
 
@@ -44,10 +41,6 @@ const handleIdempotentAdminAction = async (key, action, executeFn) => {
   };
 };
 
-/**
- * Admin credit wallet
- * POST /api/wallet/credit
- */
 export const adminCredit = asyncHandler(async (req, res, next) => {
   const { userId, currency = 'VEs', amount, reason = 'Admin credit' } = req.body;
   const idempotencyKey = req.headers['idempotency-key'];
@@ -84,10 +77,6 @@ export const adminCredit = asyncHandler(async (req, res, next) => {
   res.status(statusCode).json(body);
 });
 
-/**
- * Admin debit wallet
- * POST /api/wallet/debit
- */
 export const adminDebit = asyncHandler(async (req, res, next) => {
   const { userId, currency = 'VEs', amount, reason = 'Admin debit' } = req.body;
   const idempotencyKey = req.headers['idempotency-key'];
@@ -124,10 +113,6 @@ export const adminDebit = asyncHandler(async (req, res, next) => {
   res.status(statusCode).json(body);
 });
 
-/**
- * Admin list all withdrawals
- * GET /api/admin/withdrawals
- */
 export const listAllWithdrawals = asyncHandler(async (req, res) => {
   const { page, limit, status, userId } = req.query;
   const result = await getAllWithdrawals({ page, limit, status, userId });
@@ -139,10 +124,6 @@ export const listAllWithdrawals = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * Admin review withdrawal
- * POST /api/admin/withdrawals/:id/review
- */
 export const reviewUserWithdrawal = asyncHandler(async (req, res, next) => {
   const { status, reviewNotes } = req.body;
   if (!status) {
@@ -164,10 +145,6 @@ export const reviewUserWithdrawal = asyncHandler(async (req, res, next) => {
   });
 });
 
-/**
- * Admin reconcile user wallet
- * GET /api/admin/reconcile/:userId
- */
 export const adminReconcileUser = asyncHandler(async (req, res) => {
   const result = await reconcileUserWallet(req.params.userId);
 
@@ -177,10 +154,6 @@ export const adminReconcileUser = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * Admin update payout option
- * PATCH /api/admin/payout-options/:optionId
- */
 export const updateOptionConfig = asyncHandler(async (req, res) => {
   const updated = await updatePayoutOption(
     req.params.optionId,
