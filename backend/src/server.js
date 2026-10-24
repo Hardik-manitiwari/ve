@@ -3,7 +3,7 @@ import config from './config/env.js';
 import { connectDB, disconnectDB } from './config/db.js';
 
 const startServer = () => {
-  const server = app.listen(config.PORT, () => {
+  const server = app.listen(config.PORT, '0.0.0.0', () => {
     console.log(`[VELoop Wallet Backend] Server is running on port ${config.PORT} (${config.NODE_ENV})`);
   });
 

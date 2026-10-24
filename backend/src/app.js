@@ -24,6 +24,11 @@ app.use(
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
+// Health check endpoint for Render
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // Apply rate limiting to all requests (except in test mode)
 if (config.NODE_ENV !== 'test') {
   app.use('/api', apiLimiter);
