@@ -4,8 +4,14 @@ import { getAllWithdrawals, reviewWithdrawal } from '../services/withdrawalServi
 import { reconcileUserWallet } from '../services/reconciliationService.js';
 import { updatePayoutOption } from '../services/payoutService.js';
 import { IdempotencyKey } from '../models/IdempotencyKey.js';
+import { User } from '../models/User.js';
+import { Wallet } from '../models/Wallet.js';
+import { WalletTransaction } from '../models/WalletTransaction.js';
+import { Withdrawal } from '../models/Withdrawal.js';
+import { AuditLog } from '../models/AuditLog.js';
+import { PayoutOption } from '../models/PayoutOption.js';
 import { AppError } from '../utils/AppError.js';
-import { TRANSACTION_TYPES } from '../config/constants.js';
+import { TRANSACTION_TYPES, WITHDRAWAL_STATUSES } from '../config/constants.js';
 
 const handleIdempotentAdminAction = async (key, action, executeFn) => {
   if (key) {
@@ -169,6 +175,124 @@ export const updateOptionConfig = asyncHandler(async (req, res) => {
   });
 });
 
+export const getAdminStats = asyncHandler(async (req, res) => {
+  const [
+    totalUsers,
+    pendingWithdrawals,
+    pendingWithdrawalAgg,
+    walletsAgg,
+    totalTransactions,
+  ] = await Promise.all([
+    User.countDocuments(),
+    Withdrawal.countDocuments({ status: WITHDRAWAL_STATUSES.PENDING }),
+    Withdrawal.aggregate([
+      { $match: { status: WITHDRAWAL_STATUSES.PENDING } },
+      { $group: { _id: null, totalPendingVEs: { $sum: '$requiredAmount' } } },
+    ]),
+    Wallet.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalVEs: { $sum: '$VEs' },
+          totalSVEs: { $sum: '$SVEs' },
+          totalGems: { $sum: '$Gems' },
+          totalTokens: { $sum: '$Tokens' },
+          totalSpins: { $sum: '$Spins' },
+        },
+      },
+    ]),
+    WalletTransaction.countDocuments(),
+  ]);
+
+  const stats = {
+    totalUsers,
+    pendingWithdrawalsCount: pendingWithdrawals,
+    pendingWithdrawalsAmount: pendingWithdrawalAgg[0]?.totalPendingVEs || 0,
+    totalCirculatingVEs: walletsAgg[0]?.totalVEs || 0,
+    totalCirculatingSVEs: walletsAgg[0]?.totalSVEs || 0,
+    totalCirculatingGems: walletsAgg[0]?.totalGems || 0,
+    totalTransactions,
+  };
+
+  res.status(200).json({
+    success: true,
+    data: stats,
+  });
+});
+
+export const listAllUsers = asyncHandler(async (req, res) => {
+  const { search, role, page = 1, limit = 50 } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+  const skip = (pageNum - 1) * limitNum;
+
+  const query = {};
+  if (role) query.role = role;
+  if (search) {
+    query.email = { $regex: search.trim(), $options: 'i' };
+  }
+
+  const [users, total] = await Promise.all([
+    User.find(query).select('-password').sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+    User.countDocuments(query),
+  ]);
+
+  const userIds = users.map((u) => u._id);
+  const wallets = await Wallet.find({ userId: { $in: userIds } }).lean();
+  const walletMap = new Map(wallets.map((w) => [w.userId.toString(), w]));
+
+  const data = users.map((u) => ({
+    ...u,
+    wallet: walletMap.get(u._id.toString()) || { VEs: 0, SVEs: 0, Gems: 0, Tokens: 0, Spins: 0 },
+  }));
+
+  res.status(200).json({
+    success: true,
+    data,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    },
+  });
+});
+
+export const listAuditLogs = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 30, action, targetUserId } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
+  const skip = (pageNum - 1) * limitNum;
+
+  const query = {};
+  if (action) query.action = action;
+  if (targetUserId) query.targetUserId = targetUserId;
+
+  const [logs, total] = await Promise.all([
+    AuditLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+    AuditLog.countDocuments(query),
+  ]);
+
+  res.status(200).json({
+    success: true,
+    data: logs,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    },
+  });
+});
+
+export const listAllPayoutOptions = asyncHandler(async (req, res) => {
+  const options = await PayoutOption.find().sort({ displayOrder: 1 }).lean();
+  res.status(200).json({
+    success: true,
+    data: options,
+  });
+});
+
 export default {
   adminCredit,
   adminDebit,
@@ -176,4 +300,8 @@ export default {
   reviewUserWithdrawal,
   adminReconcileUser,
   updateOptionConfig,
+  getAdminStats,
+  listAllUsers,
+  listAuditLogs,
+  listAllPayoutOptions,
 };

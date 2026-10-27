@@ -23,8 +23,12 @@ export const LoginPage = () => {
     try {
       setLoading(true);
       setError(null);
-      await login(email, password);
-      navigate('/wallet');
+      const res = await login(email, password);
+      if (res?.data?.user?.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/wallet');
+      }
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -142,10 +146,15 @@ export const LoginPage = () => {
           </span>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', justifyContent: 'center' }}>
             <button type="button" onClick={fillDemo} className="btn btn-secondary btn-sm">
-              Demo User (25k VEs)
+              Demo User (20k VEs)
             </button>
-            <button type="button" onClick={fillAdmin} className="btn btn-secondary btn-sm">
-              Admin User
+            <button
+              type="button"
+              onClick={fillAdmin}
+              className="btn btn-secondary btn-sm"
+              style={{ border: '1px solid rgba(168, 85, 247, 0.4)', color: '#c084fc' }}
+            >
+              🛡️ Admin User (100k VEs)
             </button>
           </div>
         </div>

@@ -1,9 +1,10 @@
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
+import { Wallet } from '../models/Wallet.js';
 import config from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { ensureWallet, getWallet } from '../services/walletService.js';
+import { ensureWallet, getWallet, creditWallet } from '../services/walletService.js';
 
 const signToken = (id) => {
   return jwt.sign({ id }, config.JWT_SECRET, {
@@ -65,6 +66,31 @@ export const login = asyncHandler(async (req, res, next) => {
 
   if (user.accountStatus !== 'active') {
     return next(new AppError('This request requires additional verification.', 403, 'ACCOUNT_SUSPENDED'));
+  }
+
+  if (user.role === 'admin') {
+    await ensureWallet(user._id);
+    const existingWallet = await Wallet.findOne({ userId: user._id });
+    if (!existingWallet || existingWallet.VEs === 0) {
+      await creditWallet({
+        userId: user._id,
+        currency: 'VEs',
+        amount: 100000,
+        category: 'BONUS',
+        referenceId: `admin_login_grant_${Date.now()}`,
+        source: 'SYSTEM',
+        description: 'Admin testing grant (+100,000 VEs)',
+      });
+      await creditWallet({
+        userId: user._id,
+        currency: 'SVEs',
+        amount: 25000,
+        category: 'BONUS',
+        referenceId: `admin_login_sves_${Date.now()}`,
+        source: 'SYSTEM',
+        description: 'Admin testing grant (+25,000 SVEs)',
+      });
+    }
   }
 
   const token = signToken(user._id);

@@ -22,6 +22,15 @@ export const Layout = ({ children }) => {
 
           {user && (
             <nav className="nav-links">
+              {user.role === 'admin' && (
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) => `nav-link admin-nav-link ${isActive ? 'active' : ''}`}
+                >
+                  <span>🛡️</span>
+                  <span>Admin Panel</span>
+                </NavLink>
+              )}
               <NavLink
                 to="/wallet"
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
@@ -45,6 +54,12 @@ export const Layout = ({ children }) => {
 
           {user ? (
             <div className="nav-user">
+              {user.role === 'admin' && (
+                <span className="admin-badge" title="Administrator Privileges Enabled">
+                  🛡️ Admin
+                </span>
+              )}
+
               {wallet && (
                 <div
                   style={{

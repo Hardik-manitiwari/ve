@@ -269,8 +269,8 @@ veloop-wallet/
 ├── frontend/              React + Vite + react-router
 │   ├── src/
 │   │   ├── api/           client.js (fetch wrapper)
-│   │   ├── auth/          AuthContext.jsx, ProtectedRoute.jsx
-│   │   ├── pages/         LoginPage.jsx, RegisterPage.jsx, WalletPage.jsx, PayoutPage.jsx, WithdrawalsPage.jsx
+│   │   ├── auth/          AuthContext.jsx, ProtectedRoute.jsx, AdminRoute.jsx
+│   │   ├── pages/         LoginPage.jsx, RegisterPage.jsx, WalletPage.jsx, PayoutPage.jsx, WithdrawalsPage.jsx, AdminPage.jsx
 │   │   ├── components/    Layout.jsx, BalanceCard.jsx, TransactionList.jsx, PayoutMethodPicker.jsx, OptionPicker.jsx, ConfirmModal.jsx, StatusBadge.jsx, Alert.jsx, Spinner.jsx
 │   │   └── main.jsx, App.jsx, styles.css
 │   ├── index.html

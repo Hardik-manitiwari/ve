@@ -10,6 +10,7 @@ import { AdClaim } from '../src/models/AdClaim.js';
 import { DEFAULT_PAYOUT_OPTIONS } from './payoutOptions.js';
 import { creditWallet, ensureWallet } from '../src/services/walletService.js';
 import { reconcileUserWallet } from '../src/services/reconciliationService.js';
+import { createWithdrawal } from '../src/services/withdrawalService.js';
 import bcrypt from 'bcryptjs';
 
 const seed = async () => {
@@ -60,20 +61,73 @@ const seed = async () => {
     );
     console.log(`[Seed] Demo user ready: ${demoEmail}`);
 
-    // 3. Reset demo user's wallet, transactions, claims, and withdrawals
+    // 3. Reset demo and admin users' wallets, transactions, claims, and withdrawals
     await Promise.all([
-      Wallet.deleteOne({ userId: demoUser._id }),
-      WalletTransaction.deleteMany({ userId: demoUser._id }),
-      Withdrawal.deleteMany({ userId: demoUser._id }),
-      DailyClaim.deleteMany({ userId: demoUser._id }),
-      AdClaim.deleteMany({ userId: demoUser._id }),
+      Wallet.deleteMany({ userId: { $in: [demoUser._id, adminUser._id] } }),
+      WalletTransaction.deleteMany({ userId: { $in: [demoUser._id, adminUser._id] } }),
+      Withdrawal.deleteMany({ userId: { $in: [demoUser._id, adminUser._id] } }),
+      DailyClaim.deleteMany({ userId: { $in: [demoUser._id, adminUser._id] } }),
+      AdClaim.deleteMany({ userId: { $in: [demoUser._id, adminUser._id] } }),
     ]);
-    console.log('[Seed] Cleaned existing wallet & ledger data for demo user.');
+    console.log('[Seed] Cleaned existing wallet & ledger data for demo and admin users.');
 
-    // Ensure empty wallet
+    // Ensure empty wallets
     await ensureWallet(demoUser._id);
+    await ensureWallet(adminUser._id);
 
-    // 4. Seed balances via creditWallet so append-only ledger strictly reconciles
+    // 4. Seed balances for Admin User (100,000 VEs for thorough testing)
+    await creditWallet({
+      userId: adminUser._id,
+      currency: 'VEs',
+      amount: 100000,
+      category: 'BONUS',
+      referenceId: 'seed_admin_ves_100k',
+      source: 'SYSTEM',
+      description: 'Admin testing grant (+100,000 VEs)',
+    });
+
+    await creditWallet({
+      userId: adminUser._id,
+      currency: 'SVEs',
+      amount: 25000,
+      category: 'BONUS',
+      referenceId: 'seed_admin_sves_25k',
+      source: 'SYSTEM',
+      description: 'Admin testing grant (+25,000 SVEs)',
+    });
+
+    await creditWallet({
+      userId: adminUser._id,
+      currency: 'Gems',
+      amount: 500,
+      category: 'BONUS',
+      referenceId: 'seed_admin_gems_500',
+      source: 'SYSTEM',
+      description: 'Admin testing grant (+500 Gems)',
+    });
+
+    await creditWallet({
+      userId: adminUser._id,
+      currency: 'Tokens',
+      amount: 2500,
+      category: 'BONUS',
+      referenceId: 'seed_admin_tokens_2500',
+      source: 'SYSTEM',
+      description: 'Admin testing grant (+2,500 Tokens)',
+    });
+
+    await creditWallet({
+      userId: adminUser._id,
+      currency: 'Spins',
+      amount: 20,
+      category: 'BONUS',
+      referenceId: 'seed_admin_spins_20',
+      source: 'SYSTEM',
+      description: 'Admin testing grant (+20 Spins)',
+    });
+    console.log('[Seed] Admin balances credited: VEs 100,000, SVEs 25,000, Gems 500, Tokens 2,500, Spins 20.');
+
+    // 5. Seed balances for Demo User via creditWallet so append-only ledger strictly reconciles
     // VEs 25,000 as:
     // - 20,000 bonus
     // - 3,000 ad reward
@@ -152,9 +206,9 @@ const seed = async () => {
       description: 'Demo seed: Daily lucky wheel spins (+3 Spins)',
     });
 
-    console.log('[Seed] Seeded balances credited: VEs 25,000, SVEs 5,000, Gems 100, Tokens 500, Spins 3.');
+    console.log('[Seed] Demo balances credited: VEs 25,000, SVEs 5,000, Gems 100, Tokens 500, Spins 3.');
 
-    // 5. Upsert Payout Options
+    // 6. Upsert Payout Options
     for (const opt of DEFAULT_PAYOUT_OPTIONS) {
       await PayoutOption.findOneAndUpdate(
         { optionId: opt.optionId },
@@ -164,12 +218,28 @@ const seed = async () => {
     }
     console.log(`[Seed] Upserted ${DEFAULT_PAYOUT_OPTIONS.length} payout options.`);
 
-    // 6. Verify ledger reconciliation for demo user
-    const reconciliation = await reconcileUserWallet(demoUser._id);
-    if (!reconciliation.matches) {
+    // 7. Create a real sample pending withdrawal from Demo User so Admin can test review queue immediately
+    await createWithdrawal({
+      userId: demoUser._id,
+      optionId: 'paypal_500',
+      payoutDetails: { paypalEmail: 'demo.payout@veloop.test' },
+      idempotencyKey: 'seed_sample_pending_withdrawal_001',
+      ip: '127.0.0.1',
+    });
+    console.log('[Seed] Seeded sample pending withdrawal: PayPal ₹500 (5,000 VEs debited) ready for Admin review.');
+
+    // 8. Verify ledger reconciliation for both users
+    const [demoReconciliation, adminReconciliation] = await Promise.all([
+      reconcileUserWallet(demoUser._id),
+      reconcileUserWallet(adminUser._id),
+    ]);
+    if (!demoReconciliation.matches) {
       throw new Error('Reconciliation check failed for demo user after seed!');
     }
-    console.log('[Seed] Reconciliation verified: Ledger matches wallet 100% across all currencies.');
+    if (!adminReconciliation.matches) {
+      throw new Error('Reconciliation check failed for admin user after seed!');
+    }
+    console.log('[Seed] Reconciliation verified: Ledger matches wallet 100% across all currencies for both demo & admin.');
     console.log('[Seed] Database seeding completed successfully.');
   } catch (error) {
     console.error('[Seed] Seeding failed with error:', error);
