@@ -61,7 +61,9 @@ export const reconcileUserWallet = async (userId) => {
 
     perCurrency[currency] = {
       ledgerBalance,
+      computedBalance: ledgerBalance,
       walletBalance,
+      storedBalance: walletBalance,
       matches,
       credits,
       debits,

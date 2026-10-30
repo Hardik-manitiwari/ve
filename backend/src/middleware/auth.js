@@ -50,7 +50,12 @@ export const restrictTo = (...roles) => {
   };
 };
 
+export const authenticate = protect;
+export const requireRole = restrictTo;
+
 export default {
   protect,
   restrictTo,
+  authenticate,
+  requireRole,
 };

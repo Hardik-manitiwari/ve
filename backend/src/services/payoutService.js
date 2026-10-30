@@ -3,6 +3,7 @@ import { PAYOUT_METHODS } from '../config/payoutMethods.js';
 import { AUDIT_ACTIONS } from '../config/constants.js';
 import { AppError } from '../utils/AppError.js';
 import { recordAuditLog } from './auditService.js';
+import { withTransaction } from '../utils/transaction.js';
 
 export const getPayoutMethods = async () => {
   // Count active options in the DB so methods with 0 options show as unavailable.
@@ -102,44 +103,87 @@ export const resolvePayoutOption = async (optionId, session = null) => {
 };
 
 export const updatePayoutOption = async (optionId, updateData, adminId, ip = '') => {
-  const allowedUpdates = ['name', 'requiredAmount', 'payoutValue', 'active', 'sortOrder'];
+  if (
+    updateData.optionId !== undefined ||
+    updateData.method !== undefined ||
+    updateData.currency !== undefined
+  ) {
+    throw new AppError('Changing optionId, method, or currency is not allowed', 400, 'VALIDATION_ERROR');
+  }
+
   const sanitizedUpdate = {};
 
-  for (const key of allowedUpdates) {
-    if (updateData[key] !== undefined) {
-      sanitizedUpdate[key] = updateData[key];
+  if (updateData.active !== undefined) {
+    if (typeof updateData.active !== 'boolean') {
+      throw new AppError('active must be a boolean', 400, 'VALIDATION_ERROR');
     }
+    sanitizedUpdate.active = updateData.active;
+  }
+
+  if (updateData.requiredAmount !== undefined) {
+    if (!Number.isInteger(updateData.requiredAmount) || updateData.requiredAmount <= 0) {
+      throw new AppError('requiredAmount must be a positive integer', 400, 'VALIDATION_ERROR');
+    }
+    sanitizedUpdate.requiredAmount = updateData.requiredAmount;
+  }
+
+  if (updateData.payoutValue !== undefined) {
+    if (typeof updateData.payoutValue !== 'number' || isNaN(updateData.payoutValue) || updateData.payoutValue <= 0) {
+      throw new AppError('payoutValue must be a positive number', 400, 'VALIDATION_ERROR');
+    }
+    sanitizedUpdate.payoutValue = updateData.payoutValue;
+  }
+
+  if (updateData.sortOrder !== undefined) {
+    if (!Number.isInteger(updateData.sortOrder) || updateData.sortOrder < 0) {
+      throw new AppError('sortOrder must be a non-negative integer', 400, 'VALIDATION_ERROR');
+    }
+    sanitizedUpdate.sortOrder = updateData.sortOrder;
+  }
+
+  if (updateData.name !== undefined) {
+    if (typeof updateData.name !== 'string' || !updateData.name.trim()) {
+      throw new AppError('name must be a non-empty string', 400, 'VALIDATION_ERROR');
+    }
+    sanitizedUpdate.name = updateData.name.trim();
   }
 
   if (Object.keys(sanitizedUpdate).length === 0) {
     throw new AppError('No valid update fields provided', 400, 'VALIDATION_ERROR');
   }
 
-  const existingOption = await PayoutOption.findOne({ optionId });
-  if (!existingOption) {
-    throw new AppError('Payout option not found', 404, 'NOT_FOUND');
-  }
+  return withTransaction(async (session) => {
+    const existingOption = await PayoutOption.findOne({ optionId }).session(session);
+    if (!existingOption) {
+      throw new AppError('Payout option not found', 404, 'NOT_FOUND');
+    }
 
-  const updated = await PayoutOption.findOneAndUpdate(
-    { optionId },
-    { $set: sanitizedUpdate },
-    { new: true }
-  );
+    const beforeObj = existingOption.toObject ? existingOption.toObject() : existingOption;
 
-  await recordAuditLog({
-    actorId: adminId,
-    action: AUDIT_ACTIONS.PAYOUT_CONFIG_CHANGED,
-    targetType: 'PAYOUT_OPTION',
-    referenceId: optionId,
-    metadata: {
-      before: existingOption.toObject(),
-      after: updated.toObject(),
-      changes: sanitizedUpdate,
-    },
-    ip,
+    const updated = await PayoutOption.findOneAndUpdate(
+      { optionId },
+      { $set: sanitizedUpdate },
+      { new: true, session }
+    );
+
+    const afterObj = updated.toObject ? updated.toObject() : updated;
+
+    await recordAuditLog({
+      actorId: adminId,
+      action: AUDIT_ACTIONS.PAYOUT_CONFIG_CHANGED,
+      targetType: 'PAYOUT_OPTION',
+      referenceId: optionId,
+      metadata: {
+        before: beforeObj,
+        after: afterObj,
+        changes: sanitizedUpdate,
+      },
+      ip,
+      session,
+    });
+
+    return updated;
   });
-
-  return updated;
 };
 
 export default {

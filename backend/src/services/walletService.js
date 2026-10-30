@@ -208,13 +208,14 @@ export const adjustWallet = async ({
   currency = 'VEs',
   amount,
   reason = 'Admin adjustment',
+  correction = false,
   metadata = {},
   ip = '',
   session = null,
 }) => {
   const isCredit = type === TRANSACTION_TYPES.CREDIT;
-  const category = isCredit ? 'ADMIN_CREDIT' : 'ADMIN_DEBIT';
-  const auditAction = isCredit ? AUDIT_ACTIONS.WALLET_CREDIT : AUDIT_ACTIONS.WALLET_DEBIT;
+  const category = correction ? 'CORRECTION' : (isCredit ? 'ADMIN_CREDIT' : 'ADMIN_DEBIT');
+  const auditAction = correction ? AUDIT_ACTIONS.BALANCE_CORRECTION : (isCredit ? AUDIT_ACTIONS.WALLET_CREDIT : AUDIT_ACTIONS.WALLET_DEBIT);
 
   const execute = async (activeSession) => {
     const movement = await applyMovement({
@@ -226,7 +227,7 @@ export const adjustWallet = async ({
       referenceId: uuidv4(),
       source: 'ADMIN',
       description: reason,
-      metadata: { ...metadata, adminId, reason },
+      metadata: { ...metadata, adminId, reason, correction: Boolean(correction) },
       session: activeSession,
     });
 
@@ -241,6 +242,7 @@ export const adjustWallet = async ({
         amount,
         type,
         reason,
+        correction: Boolean(correction),
         balanceBefore: movement.transaction.balanceBefore,
         balanceAfter: movement.transaction.balanceAfter,
       },

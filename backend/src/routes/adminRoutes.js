@@ -7,25 +7,32 @@ import {
   adminCredit,
   adminDebit,
   getAdminStats,
+  getAdminSummary,
   listAllUsers,
+  getUserById,
+  listLedgerRows,
   listAuditLogs,
   listAllPayoutOptions,
 } from '../controllers/adminController.js';
-import { protect, restrictTo } from '../middleware/auth.js';
+import { authenticate, requireRole } from '../middleware/auth.js';
 import { USER_ROLES } from '../config/constants.js';
 
 const router = express.Router();
 
-router.use(protect);
-router.use(restrictTo(USER_ROLES.ADMIN));
+router.use(authenticate);
+router.use(requireRole(USER_ROLES.ADMIN));
 
-// Metrics & Analytics
+// Summary & Stats
+router.get('/summary', getAdminSummary);
 router.get('/stats', getAdminStats);
 
 // User & Balance Directory
 router.get('/users', listAllUsers);
+router.get('/users/:userId', getUserById);
 router.post('/credit', adminCredit);
 router.post('/debit', adminDebit);
+
+// Reconciliation
 router.get('/reconcile/:userId', adminReconcileUser);
 
 // Withdrawals Review Queue
@@ -36,7 +43,11 @@ router.post('/withdrawals/:id/review', reviewUserWithdrawal);
 router.get('/payout-options', listAllPayoutOptions);
 router.patch('/payout-options/:optionId', updateOptionConfig);
 
+// Ledger Records
+router.get('/ledger', listLedgerRows);
+
 // System Audit Logs
+router.get('/audit', listAuditLogs);
 router.get('/audit-logs', listAuditLogs);
 
 export default router;

@@ -17,6 +17,11 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters'],
     },
+    name: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     role: {
       type: String,
       enum: Object.values(USER_ROLES),
@@ -30,6 +35,20 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: (doc, ret) => {
+        delete ret.password;
+        delete ret.passwordHash;
+        return ret;
+      },
+    },
+    toObject: {
+      transform: (doc, ret) => {
+        delete ret.password;
+        delete ret.passwordHash;
+        return ret;
+      },
+    },
   }
 );
 

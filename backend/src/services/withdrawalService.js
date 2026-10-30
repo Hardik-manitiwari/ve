@@ -215,6 +215,12 @@ export const reviewWithdrawal = async ({
     throw new AppError('Invalid withdrawal status', 400, 'INVALID_STATUS');
   }
 
+  if (newStatus === WITHDRAWAL_STATUSES.REJECTED) {
+    if (!reviewNotes || typeof reviewNotes !== 'string' || !reviewNotes.trim() || reviewNotes.trim().length < 3) {
+      throw new AppError('A reason of at least 3 characters is required for rejection', 400, 'VALIDATION_ERROR');
+    }
+  }
+
   return withTransaction(async (session) => {
     const withdrawal = await Withdrawal.findOne({
       $or: [{ withdrawalId }, { _id: withdrawalId.match(/^[0-9a-fA-F]{24}$/) ? withdrawalId : null }],

@@ -48,16 +48,20 @@ const handleIdempotentAdminAction = async (key, action, executeFn) => {
 };
 
 export const adminCredit = asyncHandler(async (req, res, next) => {
-  const { userId, currency = 'VEs', amount, reason = 'Admin credit' } = req.body;
+  const { userId, currency = 'VEs', amount, reason, correction = false } = req.body;
   const idempotencyKey = req.headers['idempotency-key'];
 
-  if (!userId || !amount) {
+  if (!userId || amount === undefined || amount === null) {
     return next(new AppError('Please provide userId and amount', 400, 'VALIDATION_ERROR'));
+  }
+
+  if (!reason || typeof reason !== 'string' || !reason.trim()) {
+    return next(new AppError('Please provide a reason', 400, 'VALIDATION_ERROR'));
   }
 
   const { statusCode, body } = await handleIdempotentAdminAction(
     idempotencyKey,
-    'WALLET_CREDIT',
+    correction ? 'BALANCE_CORRECTION' : 'WALLET_CREDIT',
     async () => {
       const result = await adjustWallet({
         adminId: req.user._id,
@@ -65,7 +69,8 @@ export const adminCredit = asyncHandler(async (req, res, next) => {
         type: TRANSACTION_TYPES.CREDIT,
         currency,
         amount,
-        reason,
+        reason: reason.trim(),
+        correction: Boolean(correction),
         ip: req.ip,
       });
 
@@ -84,16 +89,20 @@ export const adminCredit = asyncHandler(async (req, res, next) => {
 });
 
 export const adminDebit = asyncHandler(async (req, res, next) => {
-  const { userId, currency = 'VEs', amount, reason = 'Admin debit' } = req.body;
+  const { userId, currency = 'VEs', amount, reason, correction = false } = req.body;
   const idempotencyKey = req.headers['idempotency-key'];
 
-  if (!userId || !amount) {
+  if (!userId || amount === undefined || amount === null) {
     return next(new AppError('Please provide userId and amount', 400, 'VALIDATION_ERROR'));
+  }
+
+  if (!reason || typeof reason !== 'string' || !reason.trim()) {
+    return next(new AppError('Please provide a reason', 400, 'VALIDATION_ERROR'));
   }
 
   const { statusCode, body } = await handleIdempotentAdminAction(
     idempotencyKey,
-    'WALLET_DEBIT',
+    correction ? 'BALANCE_CORRECTION' : 'WALLET_DEBIT',
     async () => {
       const result = await adjustWallet({
         adminId: req.user._id,
@@ -101,7 +110,8 @@ export const adminDebit = asyncHandler(async (req, res, next) => {
         type: TRANSACTION_TYPES.DEBIT,
         currency,
         amount,
-        reason,
+        reason: reason.trim(),
+        correction: Boolean(correction),
         ip: req.ip,
       });
 
@@ -136,11 +146,17 @@ export const reviewUserWithdrawal = asyncHandler(async (req, res, next) => {
     return next(new AppError('Please provide target status', 400, 'VALIDATION_ERROR'));
   }
 
+  if (status === WITHDRAWAL_STATUSES.REJECTED) {
+    if (!reviewNotes || typeof reviewNotes !== 'string' || !reviewNotes.trim() || reviewNotes.trim().length < 3) {
+      return next(new AppError('A reason of at least 3 characters is required for rejection', 400, 'VALIDATION_ERROR'));
+    }
+  }
+
   const updated = await reviewWithdrawal({
     withdrawalId: req.params.id,
     adminId: req.user._id,
     newStatus: status,
-    reviewNotes,
+    reviewNotes: reviewNotes ? reviewNotes.trim() : '',
     ip: req.ip,
   });
 
@@ -220,20 +236,102 @@ export const getAdminStats = asyncHandler(async (req, res) => {
   });
 });
 
+export const getAdminSummary = asyncHandler(async (req, res) => {
+  const now = new Date();
+  const startOfTodayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+  const endOfTodayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+
+  const [statusCountsAgg, todayAgg, walletsAgg] = await Promise.all([
+    Withdrawal.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]),
+    Withdrawal.aggregate([
+      {
+        $match: {
+          status: { $in: [WITHDRAWAL_STATUSES.APPROVED, WITHDRAWAL_STATUSES.REJECTED] },
+          $or: [
+            { reviewedAt: { $gte: startOfTodayUTC, $lte: endOfTodayUTC } },
+            { updatedAt: { $gte: startOfTodayUTC, $lte: endOfTodayUTC } },
+          ],
+        },
+      },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]),
+    Wallet.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalVEs: { $sum: '$VEs' },
+          totalSVEs: { $sum: '$SVEs' },
+          totalGems: { $sum: '$Gems' },
+          totalTokens: { $sum: '$Tokens' },
+          totalSpins: { $sum: '$Spins' },
+        },
+      },
+    ]),
+  ]);
+
+  const withdrawalCounts = {
+    PENDING: 0,
+    PROCESSING: 0,
+    APPROVED: 0,
+    REJECTED: 0,
+    CANCELLED: 0,
+  };
+  statusCountsAgg.forEach((item) => {
+    if (item._id && withdrawalCounts[item._id] !== undefined) {
+      withdrawalCounts[item._id] = item.count;
+    }
+  });
+
+  let approvedToday = 0;
+  let rejectedToday = 0;
+  todayAgg.forEach((item) => {
+    if (item._id === WITHDRAWAL_STATUSES.APPROVED) approvedToday = item.count;
+    if (item._id === WITHDRAWAL_STATUSES.REJECTED) rejectedToday = item.count;
+  });
+
+  const currencyTotals = {
+    VEs: walletsAgg[0]?.totalVEs || 0,
+    SVEs: walletsAgg[0]?.totalSVEs || 0,
+    Gems: walletsAgg[0]?.totalGems || 0,
+    Tokens: walletsAgg[0]?.totalTokens || 0,
+    Spins: walletsAgg[0]?.totalSpins || 0,
+  };
+
+  res.status(200).json({
+    success: true,
+    data: {
+      withdrawalCounts,
+      today: {
+        approved: approvedToday,
+        rejected: rejectedToday,
+      },
+      approvedToday,
+      rejectedToday,
+      currencyTotals,
+    },
+  });
+});
+
 export const listAllUsers = asyncHandler(async (req, res) => {
-  const { search, role, page = 1, limit = 50 } = req.query;
+  const { search, role, page = 1, limit = 20 } = req.query;
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
   const skip = (pageNum - 1) * limitNum;
 
   const query = {};
   if (role) query.role = role;
-  if (search) {
-    query.email = { $regex: search.trim(), $options: 'i' };
+  if (search && search.trim()) {
+    const s = search.trim();
+    query.$or = [
+      { email: { $regex: s, $options: 'i' } },
+      { name: { $regex: s, $options: 'i' } },
+    ];
   }
 
   const [users, total] = await Promise.all([
-    User.find(query).select('-password').sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+    User.find(query).select('-password -passwordHash').sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
     User.countDocuments(query),
   ]);
 
@@ -241,10 +339,29 @@ export const listAllUsers = asyncHandler(async (req, res) => {
   const wallets = await Wallet.find({ userId: { $in: userIds } }).lean();
   const walletMap = new Map(wallets.map((w) => [w.userId.toString(), w]));
 
-  const data = users.map((u) => ({
-    ...u,
-    wallet: walletMap.get(u._id.toString()) || { VEs: 0, SVEs: 0, Gems: 0, Tokens: 0, Spins: 0 },
-  }));
+  const data = users.map((u) => {
+    const w = walletMap.get(u._id.toString()) || { VEs: 0, SVEs: 0, Gems: 0, Tokens: 0, Spins: 0 };
+    return {
+      id: u._id,
+      email: u.email,
+      name: u.name || '',
+      role: u.role,
+      accountStatus: u.accountStatus,
+      VEs: w.VEs || 0,
+      SVEs: w.SVEs || 0,
+      Gems: w.Gems || 0,
+      Tokens: w.Tokens || 0,
+      Spins: w.Spins || 0,
+      wallet: {
+        VEs: w.VEs || 0,
+        SVEs: w.SVEs || 0,
+        Gems: w.Gems || 0,
+        Tokens: w.Tokens || 0,
+        Spins: w.Spins || 0,
+      },
+      createdAt: u.createdAt,
+    };
+  });
 
   res.status(200).json({
     success: true,
@@ -258,10 +375,85 @@ export const listAllUsers = asyncHandler(async (req, res) => {
   });
 });
 
-export const listAuditLogs = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 30, action, targetUserId } = req.query;
+export const getUserById = asyncHandler(async (req, res, next) => {
+  const { userId } = req.params;
+  const user = await User.findById(userId).select('-password -passwordHash').lean();
+  if (!user) {
+    return next(new AppError('User not found', 404, 'NOT_FOUND'));
+  }
+
+  const [wallet, ledger] = await Promise.all([
+    Wallet.findOne({ userId }).lean(),
+    WalletTransaction.find({ userId }).sort({ createdAt: -1 }).limit(20).lean(),
+  ]);
+
+  const walletData = wallet
+    ? { VEs: wallet.VEs || 0, SVEs: wallet.SVEs || 0, Gems: wallet.Gems || 0, Tokens: wallet.Tokens || 0, Spins: wallet.Spins || 0 }
+    : { VEs: 0, SVEs: 0, Gems: 0, Tokens: 0, Spins: 0 };
+
+  res.status(200).json({
+    success: true,
+    data: {
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name || '',
+        role: user.role,
+        accountStatus: user.accountStatus,
+        createdAt: user.createdAt,
+      },
+      wallet: walletData,
+      ledger,
+      transactions: ledger,
+    },
+  });
+});
+
+export const listLedgerRows = asyncHandler(async (req, res) => {
+  const { userId, currency, type, category, from, to, page = 1, limit = 20 } = req.query;
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+  const skip = (pageNum - 1) * limitNum;
+
+  const query = {};
+  if (userId) query.userId = userId;
+  if (currency) query.currency = currency;
+  if (type) query.type = type;
+  if (category) query.category = category;
+
+  if (from || to) {
+    query.createdAt = {};
+    if (from) {
+      const fromDate = new Date(from);
+      if (!isNaN(fromDate.getTime())) query.createdAt.$gte = fromDate;
+    }
+    if (to) {
+      const toDate = new Date(to);
+      if (!isNaN(toDate.getTime())) query.createdAt.$lte = toDate;
+    }
+  }
+
+  const [items, total] = await Promise.all([
+    WalletTransaction.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+    WalletTransaction.countDocuments(query),
+  ]);
+
+  res.status(200).json({
+    success: true,
+    data: items,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum) || 1,
+    },
+  });
+});
+
+export const listAuditLogs = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 20, action, targetUserId } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
   const skip = (pageNum - 1) * limitNum;
 
   const query = {};
@@ -286,7 +478,7 @@ export const listAuditLogs = asyncHandler(async (req, res) => {
 });
 
 export const listAllPayoutOptions = asyncHandler(async (req, res) => {
-  const options = await PayoutOption.find().sort({ displayOrder: 1 }).lean();
+  const options = await PayoutOption.find().sort({ sortOrder: 1, requiredAmount: 1 }).lean();
   res.status(200).json({
     success: true,
     data: options,
@@ -301,7 +493,10 @@ export default {
   adminReconcileUser,
   updateOptionConfig,
   getAdminStats,
+  getAdminSummary,
   listAllUsers,
+  getUserById,
+  listLedgerRows,
   listAuditLogs,
   listAllPayoutOptions,
 };

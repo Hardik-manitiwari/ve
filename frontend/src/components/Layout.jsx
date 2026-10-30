@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 
 export const Layout = ({ children }) => {
@@ -22,15 +22,6 @@ export const Layout = ({ children }) => {
 
           {user && (
             <nav className="nav-links">
-              {user.role === 'admin' && (
-                <NavLink
-                  to="/admin"
-                  className={({ isActive }) => `nav-link admin-nav-link ${isActive ? 'active' : ''}`}
-                >
-                  <span>🛡️</span>
-                  <span>Admin Panel</span>
-                </NavLink>
-              )}
               <NavLink
                 to="/wallet"
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
@@ -55,9 +46,21 @@ export const Layout = ({ children }) => {
           {user ? (
             <div className="nav-user">
               {user.role === 'admin' && (
-                <span className="admin-badge" title="Administrator Privileges Enabled">
-                  🛡️ Admin
-                </span>
+                <Link
+                  to="/admin"
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    border: '1px solid rgba(168, 85, 247, 0.4)',
+                    color: '#c084fc',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                  }}
+                  title="Switch to Admin Console"
+                >
+                  <span>🛡️</span>
+                  <span>Admin Console</span>
+                </Link>
               )}
 
               {wallet && (
